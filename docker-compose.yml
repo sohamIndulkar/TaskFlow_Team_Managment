@@ -1,0 +1,39 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: taskflow
+      MYSQL_USER: taskflow
+      MYSQL_PASSWORD: taskflow
+      MYSQL_ROOT_PASSWORD: localroot
+    ports:
+      - "3306:3306"
+    volumes:
+      - taskflow_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-plocalroot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build: ./backend
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/taskflow?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: taskflow
+      DB_PASSWORD: taskflow
+      JWT_SECRET: ${JWT_SECRET:-TaskFlow-Local-Development-Secret-Key-Replace-In-Production-2026}
+      CORS_ORIGIN: http://localhost:5173
+      DEMO_SEED: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+  web:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+volumes:
+  taskflow_mysql:

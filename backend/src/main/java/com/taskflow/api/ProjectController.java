@@ -1,0 +1,12 @@
+package com.taskflow.api;
+import com.taskflow.model.*;import com.taskflow.repo.*;import jakarta.validation.Valid;import org.springframework.http.HttpStatus;import org.springframework.web.bind.annotation.*;import org.springframework.web.server.ResponseStatusException;import java.util.*;import static com.taskflow.api.ApiDtos.*;
+@RestController @RequestMapping("/api/projects") public class ProjectController extends BaseController{
+ private final ProjectRepository projects;private final UserRepository users;private final TaskRepository tasks;
+ public ProjectController(ProjectRepository p,UserRepository u,TaskRepository t){projects=p;users=u;tasks=t;}
+ @GetMapping List<ProjectView> list(){return projects.findVisibleTo(me().id).stream().map(this::view).toList();}
+ @PostMapping ProjectView create(@Valid @RequestBody ProjectRequest r){Project p=new Project(r.name().trim(),r.description(),r.color()==null?"#4f46e5":r.color(),me());if(r.memberIds()!=null)r.memberIds().forEach(id->p.members.add(users.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Team member not found."))));return view(projects.save(p));}
+ @PutMapping("/{id}") ProjectView update(@PathVariable Long id,@Valid @RequestBody ProjectRequest r){Project p=expanded(id);if(!p.owner.id.equals(me().id)&&me().role!=Role.ADMIN)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the project owner can update project settings.");p.name=r.name().trim();p.description=r.description();if(r.color()!=null)p.color=r.color();if(r.memberIds()!=null){p.members.clear();p.members.add(p.owner);r.memberIds().forEach(uid->p.members.add(users.findById(uid).orElseThrow()));}return view(projects.save(p));}
+ @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id){Project p=expanded(id);if(!p.owner.id.equals(me().id)&&me().role!=Role.ADMIN)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the project owner can delete this project.");projects.delete(p);}
+ Project expanded(Long id){return projects.findExpandedById(id).filter(p->p.owner.id.equals(me().id)||p.members.stream().anyMatch(m->m.id.equals(me().id))||me().role==Role.ADMIN).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Project not found."));}
+ ProjectView view(Project p){return new ProjectView(p.id,p.name,p.description,p.color,UserView.of(p.owner),p.members.stream().map(UserView::of).toList(),p.createdAt,tasks.countByProjectId(p.id),tasks.countByProjectIdAndStatus(p.id,TaskStatus.DONE));}
+}
